@@ -3,8 +3,8 @@
  */
 package liquibase.integration.spring;
 
+import liquibase.Scope;
 import liquibase.exception.LiquibaseException;
-import liquibase.logging.LogService;
 import liquibase.logging.LogType;
 import liquibase.logging.Logger;
 import org.springframework.beans.factory.InitializingBean;
@@ -43,8 +43,8 @@ import java.util.Map;
  */
 public class MultiTenantSpringLiquibase implements InitializingBean, ResourceLoaderAware {
     private final List<DataSource> dataSources = new ArrayList<>();
-    private Logger log = LogService.getLog(MultiTenantSpringLiquibase.class);
-	/** Defines the location of data sources suitable for multi-tenant environment. */
+
+    /** Defines the location of data sources suitable for multi-tenant environment. */
 	private String jndiBase;
 		/** Defines a single data source and several schemas for a multi-tenant environment. */
 	private DataSource dataSource;
@@ -79,6 +79,8 @@ public class MultiTenantSpringLiquibase implements InitializingBean, ResourceLoa
 
 	@Override
 	public void afterPropertiesSet() throws Exception {
+		Logger log = Scope.getCurrentScope().getLog(getClass());
+
 		if((dataSource != null) || (schemas != null)) {
 			if((dataSource == null) && (schemas != null)) {
 				throw new LiquibaseException("When schemas are defined you should also define a base dataSource");				
@@ -99,6 +101,8 @@ public class MultiTenantSpringLiquibase implements InitializingBean, ResourceLoa
 	}
 
 	private void resolveDataSources() throws NamingException {
+		Logger log = Scope.getCurrentScope().getLog(getClass());
+
 		Context context = new InitialContext();
 		int lastIndexOf = jndiBase.lastIndexOf("/");
 		String jndiRoot = jndiBase.substring(0, lastIndexOf);
@@ -118,7 +122,7 @@ public class MultiTenantSpringLiquibase implements InitializingBean, ResourceLoa
 			Object lookup = context.lookup(jndiUrl);
 			if(lookup instanceof DataSource) {
 				dataSources.add((DataSource) lookup);
-				log.debug(LogType.LOG, "Added a data source at " + jndiUrl);
+				log.fine(LogType.LOG, "Added a data source at " + jndiUrl);
 			} else {
 				log.info(LogType.LOG, "Skipping a resource " + jndiUrl + " not compatible with DataSource.");
 			}
@@ -126,6 +130,8 @@ public class MultiTenantSpringLiquibase implements InitializingBean, ResourceLoa
 	}
 
 	private void runOnAllDataSources() throws LiquibaseException {
+		Logger log = Scope.getCurrentScope().getLog(getClass());
+
 		for(DataSource aDataSource : dataSources) {
             log.info(LogType.LOG, "Initializing Liquibase for data source " + aDataSource);
             SpringLiquibase liquibase = getSpringLiquibase(aDataSource);
@@ -135,6 +141,8 @@ public class MultiTenantSpringLiquibase implements InitializingBean, ResourceLoa
 	}
 	
 	private void runOnAllSchemas() throws LiquibaseException {
+		Logger log = Scope.getCurrentScope().getLog(getClass());
+
 		for(String schema : schemas) {
 			if("default".equals(schema)) {
 				schema = null;

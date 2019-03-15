@@ -1,9 +1,6 @@
 package liquibase.changelog;
 
-import liquibase.ContextExpression;
-import liquibase.Contexts;
-import liquibase.LabelExpression;
-import liquibase.RuntimeEnvironment;
+import liquibase.*;
 import liquibase.changelog.filter.ContextChangeSetFilter;
 import liquibase.changelog.filter.DbmsChangeSetFilter;
 import liquibase.changelog.filter.LabelChangeSetFilter;
@@ -12,7 +9,6 @@ import liquibase.database.Database;
 import liquibase.database.DatabaseList;
 import liquibase.database.ObjectQuotingStrategy;
 import liquibase.exception.*;
-import liquibase.logging.LogService;
 import liquibase.logging.LogType;
 import liquibase.logging.Logger;
 import liquibase.parser.ChangeLogParser;
@@ -22,12 +18,10 @@ import liquibase.parser.core.ParsedNodeException;
 import liquibase.precondition.Conditional;
 import liquibase.precondition.core.PreconditionContainer;
 import liquibase.resource.ResourceAccessor;
-import liquibase.util.StreamUtil;
 import liquibase.util.StringUtil;
 import liquibase.util.file.FilenameUtils;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
@@ -38,7 +32,7 @@ import java.util.*;
 public class DatabaseChangeLog implements Comparable<DatabaseChangeLog>, Conditional {
     private static final ThreadLocal<DatabaseChangeLog> ROOT_CHANGE_LOG = new ThreadLocal<>();
     private static final ThreadLocal<DatabaseChangeLog> PARENT_CHANGE_LOG = new ThreadLocal<>();
-    private static final Logger LOG = LogService.getLog(DatabaseChangeLog.class);
+    private static final Logger LOG = Scope.getCurrentScope().getLog(DatabaseChangeLog.class);
 
     private PreconditionContainer preconditionContainer = new PreconditionContainer();
     private String physicalFilePath;
@@ -269,7 +263,7 @@ public class DatabaseChangeLog implements Comparable<DatabaseChangeLog>, Conditi
         logIterator.run(validatingVisitor, new RuntimeEnvironment(database, contexts, labelExpression));
 
         for (String message : validatingVisitor.getWarnings().getMessages()) {
-            LogService.getLog(getClass()).warning(LogType.LOG, message);
+            Scope.getCurrentScope().getLog(getClass()).warning(LogType.LOG, message);
         }
 
         if (!validatingVisitor.validationPassed()) {
@@ -358,7 +352,7 @@ public class DatabaseChangeLog implements Comparable<DatabaseChangeLog>, Conditi
                         resourceComparator = (Comparator<String>) Class.forName(resourceComparatorDef).getConstructor().newInstance();
                     } catch (ReflectiveOperationException e) {
                         //take default comparator
-                        LogService.getLog(getClass()).info(LogType.LOG, "no resourceComparator defined - taking default " +
+                        Scope.getCurrentScope().getLog(getClass()).info(LogType.LOG, "no resourceComparator defined - taking default " +
                          "implementation");
                         resourceComparator = getStandardChangeLogComparator();
                     }
@@ -401,9 +395,9 @@ public class DatabaseChangeLog implements Comparable<DatabaseChangeLog>, Conditi
                     } else {
                         // read properties from the file
                         Properties props = new Properties();
-                        InputStream propertiesStream = StreamUtil.singleInputStream(file, resourceAccessor);
+                        InputStream propertiesStream = resourceAccessor.openStream(null, file);
                         if (propertiesStream == null) {
-                            LogService.getLog(getClass()).info(LogType.LOG, "Could not open properties file " + file);
+                            Scope.getCurrentScope().getLog(getClass()).info(LogType.LOG, "Could not open properties file " + file);
                         } else {
                             props.load(propertiesStream);
 
@@ -455,8 +449,8 @@ public class DatabaseChangeLog implements Comparable<DatabaseChangeLog>, Conditi
             if (!(pathName.endsWith("/"))) {
                 pathName = pathName + '/';
             }
-            LOG.debug(LogType.LOG, "includeAll for " + pathName);
-            LOG.debug(LogType.LOG, "Using file opener for includeAll: " + resourceAccessor.toString());
+            LOG.fine(LogType.LOG, "includeAll for " + pathName);
+            LOG.fine(LogType.LOG, "Using file opener for includeAll: " + resourceAccessor.toString());
 
             String relativeTo = null;
             if (isRelativeToChangelogFile) {
@@ -465,8 +459,8 @@ public class DatabaseChangeLog implements Comparable<DatabaseChangeLog>, Conditi
 
             Set<String> unsortedResources = null;
             try {
-                unsortedResources = resourceAccessor.list(relativeTo, pathName, true, false, true);
-            } catch (FileNotFoundException e) {
+                unsortedResources = resourceAccessor.list(relativeTo, pathName, true, true, false);
+            } catch (IOException e) {
                 if (errorIfMissingOrEmpty) {
                     throw e;
                 }
@@ -486,6 +480,7 @@ public class DatabaseChangeLog implements Comparable<DatabaseChangeLog>, Conditi
             }
 
             for (String path : resources) {
+                Scope.getCurrentScope().getLog(getClass()).info(LogType.LOG, "Reading resource: " + path);
                 include(path, false, resourceAccessor, includeContexts, false);
             }
         } catch (Exception e) {
@@ -537,7 +532,7 @@ public class DatabaseChangeLog implements Comparable<DatabaseChangeLog>, Conditi
             // This matches only an extension, but filename can be a full path, too. Is it right?
             boolean matchesFileExtension = StringUtil.trimToEmpty(fileName).matches("\\.\\w+$");
             if (matchesFileExtension || logEveryUnknownFileFormat) {
-                LogService.getLog(getClass()).warning(
+                Scope.getCurrentScope().getLog(getClass()).warning(
                         LogType.LOG, "included file " + relativeBaseFileName + "/" + fileName + " is not a recognized file type"
                 );
             }
